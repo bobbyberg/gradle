@@ -16,8 +16,11 @@
 
 package org.gradle.tooling.provider.model.internal;
 
+import org.gradle.api.internal.GradleInternal;
+import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.internal.service.scopes.Scopes;
 import org.gradle.internal.service.scopes.ServiceScope;
+import org.gradle.tooling.provider.model.ParameterizedToolingModelBuilder;
 import org.gradle.tooling.provider.model.ToolingModelBuilder;
 import org.gradle.tooling.provider.model.UnknownModelException;
 
@@ -29,7 +32,12 @@ public interface ToolingModelBuilderLookup {
     ToolingModelBuilder find(String modelName);
 
     /**
-     * Locates a model builder to be used to handle a tooling API client request.
+     * Locates a builder for a build-scoped model.
      */
-    ToolingModelBuilder locateForClientOperation(String modelName) throws UnknownModelException;
+    ParameterizedToolingModelBuilder<?> locateForClientOperation(String modelName, boolean parameter, GradleInternal target) throws UnknownModelException;
+
+    /**
+     * Locates a builder for a project-scoped model.
+     */
+    ParameterizedToolingModelBuilder<?> locateForClientOperation(String modelName, boolean parameter, ProjectInternal target) throws UnknownModelException;
 }

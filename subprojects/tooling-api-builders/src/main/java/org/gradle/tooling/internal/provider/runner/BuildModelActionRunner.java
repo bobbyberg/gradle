@@ -95,7 +95,7 @@ public class BuildModelActionRunner implements BuildActionRunner {
 
         private Object buildModel(GradleInternal gradle, BuildModelAction buildModelAction) {
             String modelName = buildModelAction.getModelName();
-            ToolingModelBuilder builder = getModelBuilder(gradle, modelName);
+            ToolingModelBuilder builder = getModelBuilder(modelName, gradle);
 
             return builder.buildAll(modelName, gradle.getDefaultProject());
         }
@@ -108,10 +108,10 @@ public class BuildModelActionRunner implements BuildActionRunner {
             }
         }
 
-        private ToolingModelBuilder getModelBuilder(GradleInternal gradle, String modelName) {
+        private ToolingModelBuilder getModelBuilder(String modelName, GradleInternal gradle) {
             ToolingModelBuilderLookup builderRegistry = getToolingModelBuilderRegistry(gradle);
             try {
-                return builderRegistry.locateForClientOperation(modelName);
+                return builderRegistry.locateForClientOperation(modelName, false, gradle);
             } catch (UnknownModelException e) {
                 modelFailure = e;
                 throw e;
