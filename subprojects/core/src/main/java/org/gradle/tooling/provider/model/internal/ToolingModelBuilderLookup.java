@@ -20,7 +20,6 @@ import org.gradle.api.internal.GradleInternal;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.internal.service.scopes.Scopes;
 import org.gradle.internal.service.scopes.ServiceScope;
-import org.gradle.tooling.provider.model.ParameterizedToolingModelBuilder;
 import org.gradle.tooling.provider.model.ToolingModelBuilder;
 import org.gradle.tooling.provider.model.UnknownModelException;
 
@@ -34,10 +33,17 @@ public interface ToolingModelBuilderLookup {
     /**
      * Locates a builder for a build-scoped model.
      */
-    ParameterizedToolingModelBuilder<?> locateForClientOperation(String modelName, boolean parameter, GradleInternal target) throws UnknownModelException;
+    Builder locateForClientOperation(String modelName, boolean parameter, GradleInternal target) throws UnknownModelException;
 
     /**
      * Locates a builder for a project-scoped model.
      */
-    ParameterizedToolingModelBuilder<?> locateForClientOperation(String modelName, boolean parameter, ProjectInternal target) throws UnknownModelException;
+    Builder locateForClientOperation(String modelName, boolean parameter, ProjectInternal target) throws UnknownModelException;
+
+    interface Builder {
+        @Nullable
+        Class<?> getParameterType();
+
+        Object build(@Nullable Object parameter);
+    }
 }

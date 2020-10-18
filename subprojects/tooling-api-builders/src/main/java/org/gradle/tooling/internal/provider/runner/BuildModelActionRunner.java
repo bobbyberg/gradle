@@ -28,7 +28,6 @@ import org.gradle.internal.invocation.BuildActionRunner;
 import org.gradle.internal.invocation.BuildController;
 import org.gradle.tooling.internal.protocol.InternalUnsupportedModelException;
 import org.gradle.tooling.internal.provider.BuildModelAction;
-import org.gradle.tooling.provider.model.ToolingModelBuilder;
 import org.gradle.tooling.provider.model.UnknownModelException;
 import org.gradle.tooling.provider.model.internal.ToolingModelBuilderLookup;
 
@@ -95,9 +94,8 @@ public class BuildModelActionRunner implements BuildActionRunner {
 
         private Object buildModel(GradleInternal gradle, BuildModelAction buildModelAction) {
             String modelName = buildModelAction.getModelName();
-            ToolingModelBuilder builder = getModelBuilder(modelName, gradle);
-
-            return builder.buildAll(modelName, gradle.getDefaultProject());
+            ToolingModelBuilderLookup.Builder builder = getModelBuilder(modelName, gradle);
+            return builder.build(null);
         }
 
         private static void forceFullConfiguration(GradleInternal gradle) {
@@ -108,7 +106,7 @@ public class BuildModelActionRunner implements BuildActionRunner {
             }
         }
 
-        private ToolingModelBuilder getModelBuilder(String modelName, GradleInternal gradle) {
+        private ToolingModelBuilderLookup.Builder getModelBuilder(String modelName, GradleInternal gradle) {
             ToolingModelBuilderLookup builderRegistry = getToolingModelBuilderRegistry(gradle);
             try {
                 return builderRegistry.locateForClientOperation(modelName, false, gradle);

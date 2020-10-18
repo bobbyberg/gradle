@@ -40,7 +40,6 @@ import org.gradle.tooling.internal.protocol.InternalBuildControllerVersion2;
 import org.gradle.tooling.internal.protocol.InternalUnsupportedModelException;
 import org.gradle.tooling.internal.protocol.ModelIdentifier;
 import org.gradle.tooling.internal.provider.connection.ProviderBuildResult;
-import org.gradle.tooling.provider.model.ParameterizedToolingModelBuilder;
 import org.gradle.tooling.provider.model.UnknownModelException;
 import org.gradle.tooling.provider.model.internal.ToolingModelBuilderLookup;
 
@@ -90,14 +89,13 @@ class DefaultBuildController implements org.gradle.tooling.internal.protocol.Int
             throw new BuildCancelledException(String.format("Could not build '%s' model. Build cancelled.", modelIdentifier.getName()));
         }
         ModelTarget modelTarget = getTarget(target);
-        ParameterizedToolingModelBuilder<?> builder = getToolingModelBuilder(modelTarget, parameter != null, modelIdentifier);
-        String modelName = modelIdentifier.getName();
+        ToolingModelBuilderLookup.Builder builder = getToolingModelBuilder(modelTarget, parameter != null, modelIdentifier);
 
         Object model;
         if (parameter == null) {
-            model = builder.buildAll(modelName, null, modelTarget.targetProject);
+            model = builder.build(null);
         } else {
-            model = getParameterizedModel(modelTarget.targetProject, modelName, (ParameterizedToolingModelBuilder<?>) builder, parameter);
+            model = getParameterizedModel(builder, parameter);
         }
 
         return new ProviderBuildResult<>(model);
@@ -132,16 +130,13 @@ class DefaultBuildController implements org.gradle.tooling.internal.protocol.Int
         return results;
     }
 
-    private <T> Object getParameterizedModel(ProjectInternal project,
-                                             String modelName,
-                                             ParameterizedToolingModelBuilder<T> builder,
-                                             Object parameter)
+    private Object getParameterizedModel(ToolingModelBuilderLookup.Builder builder, Object parameter)
         throws InternalUnsupportedModelException {
-        Class<T> expectedParameterType = builder.getParameterType();
+        Class<?> expectedParameterType = builder.getParameterType();
 
-        ViewBuilder<T> viewBuilder = new ProtocolToModelAdapter().builder(expectedParameterType);
-        T internalParameter = viewBuilder.build(parameter);
-        return builder.buildAll(modelName, internalParameter, project);
+        ViewBuilder<?> viewBuilder = new ProtocolToModelAdapter().builder(expectedParameterType);
+        Object internalParameter = viewBuilder.build(parameter);
+        return builder.build(internalParameter);
     }
 
     private ModelTarget getTarget(Object target) {
@@ -185,7 +180,7 @@ class DefaultBuildController implements org.gradle.tooling.internal.protocol.Int
         return build.getRootProject().project(projectIdentity.getProjectPath());
     }
 
-    private ParameterizedToolingModelBuilder<?> getToolingModelBuilder(ModelTarget modelTarget, boolean parameter, ModelIdentifier modelIdentifier) {
+    private ToolingModelBuilderLookup.Builder getToolingModelBuilder(ModelTarget modelTarget, boolean parameter, ModelIdentifier modelIdentifier) {
         ToolingModelBuilderLookup modelBuilderRegistry = modelTarget.targetProject.getServices().get(ToolingModelBuilderLookup.class);
         try {
             return modelTarget.locate(modelBuilderRegistry, parameter, modelIdentifier);
@@ -207,7 +202,7 @@ class DefaultBuildController implements org.gradle.tooling.internal.protocol.Int
             this.targetProject = targetProject;
         }
 
-        abstract ParameterizedToolingModelBuilder<?> locate(ToolingModelBuilderLookup lookup, boolean parameter, ModelIdentifier modelIdentifier);
+        abstract ToolingModelBuilderLookup.Builder locate(ToolingModelBuilderLookup lookup, boolean parameter, ModelIdentifier modelIdentifier);
     }
 
     private static class ProjectScopedModel extends ModelTarget {
@@ -216,7 +211,7 @@ class DefaultBuildController implements org.gradle.tooling.internal.protocol.Int
         }
 
         @Override
-        ParameterizedToolingModelBuilder<?> locate(ToolingModelBuilderLookup lookup, boolean parameter, ModelIdentifier modelIdentifier) {
+        ToolingModelBuilderLookup.Builder locate(ToolingModelBuilderLookup lookup, boolean parameter, ModelIdentifier modelIdentifier) {
             return lookup.locateForClientOperation(modelIdentifier.getName(), parameter, targetProject);
         }
     }
@@ -230,7 +225,7 @@ class DefaultBuildController implements org.gradle.tooling.internal.protocol.Int
         }
 
         @Override
-        ParameterizedToolingModelBuilder<?> locate(ToolingModelBuilderLookup lookup, boolean parameter, ModelIdentifier modelIdentifier) {
+        ToolingModelBuilderLookup.Builder locate(ToolingModelBuilderLookup lookup, boolean parameter, ModelIdentifier modelIdentifier) {
             return lookup.locateForClientOperation(modelIdentifier.getName(), parameter, targetBuild);
         }
     }

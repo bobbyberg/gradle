@@ -61,7 +61,6 @@ class DefaultToolingModelBuilderRegistryTest extends Specification {
 
         expect:
         def actualBuilder = registry.locateForClientOperation("model")
-        actualBuilder instanceof DefaultToolingModelBuilderRegistry.BuildOperationWrappingToolingModelBuilder
         actualBuilder.delegate == builder2
     }
 
@@ -116,7 +115,6 @@ class DefaultToolingModelBuilderRegistryTest extends Specification {
 
         then:
         def actualBuilder = registry.locateForClientOperation("model")
-        actualBuilder instanceof DefaultToolingModelBuilderRegistry.ParameterizedBuildOperationWrappingToolingModelBuilder
         actualBuilder.delegate == builder
     }
 }

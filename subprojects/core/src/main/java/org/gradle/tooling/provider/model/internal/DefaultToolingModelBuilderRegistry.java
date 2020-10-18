@@ -64,24 +64,25 @@ public class DefaultToolingModelBuilderRegistry implements ToolingModelBuilderRe
     }
 
     @Override
-    public ParameterizedToolingModelBuilder<?> locateForClientOperation(String modelName, boolean parameter, GradleInternal target) throws UnknownModelException {
-        return new BuildOperationWrappingBuilder(new LockAllProjectsBuilder(locateForClientOperation(modelName, parameter), projectStateRegistry), buildOperationExecutor);
+    public Builder locateForClientOperation(String modelName, boolean parameter, GradleInternal target) throws UnknownModelException {
+        ProjectInternal project = target.getDefaultProject();
+        return new BuildOperationWrappingBuilder(new LockAllProjectsBuilder(locateForClientOperation(modelName, project, parameter), projectStateRegistry), modelName, project, buildOperationExecutor);
     }
 
     @Override
-    public ParameterizedToolingModelBuilder<?> locateForClientOperation(String modelName, boolean parameter, ProjectInternal target) throws UnknownModelException {
-        return new BuildOperationWrappingBuilder(new LockSingleProjectBuilder(locateForClientOperation(modelName, parameter), projectStateRegistry), buildOperationExecutor);
+    public Builder locateForClientOperation(String modelName, boolean parameter, ProjectInternal target) throws UnknownModelException {
+        return new BuildOperationWrappingBuilder(new LockSingleProjectBuilder(locateForClientOperation(modelName, target, parameter), target, projectStateRegistry), modelName, target, buildOperationExecutor);
     }
 
-    private ParameterizedToolingModelBuilder<Object> locateForClientOperation(String modelName, boolean parameter) throws UnknownModelException {
+    private Builder locateForClientOperation(String modelName, ProjectInternal project, boolean parameter) throws UnknownModelException {
         ToolingModelBuilder builder = get(modelName);
         if (builder instanceof ParameterizedToolingModelBuilder) {
-            return Cast.uncheckedCast(builder);
+            return new BuilderWithParameter(modelName, project, (ParameterizedToolingModelBuilder) builder);
         }
         if (parameter) {
             throw new UnknownModelException(String.format("No parameterized builders are available to build a model of type '%s'.", modelName));
         }
-        return new AdaptingBuilder(builder);
+        return new BuilderWithNoParameter(modelName, project, builder);
     }
 
     @Nullable
@@ -131,102 +132,118 @@ public class DefaultToolingModelBuilderRegistry implements ToolingModelBuilderRe
         }
     }
 
-    private static abstract class DelegatingBuilder implements ParameterizedToolingModelBuilder<Object> {
-        final ParameterizedToolingModelBuilder<Object> delegate;
+    private static abstract class DelegatingBuilder implements Builder {
+        final Builder delegate;
 
-        public DelegatingBuilder(ParameterizedToolingModelBuilder<Object> delegate) {
+        public DelegatingBuilder(Builder delegate) {
             this.delegate = delegate;
         }
 
         @Override
-        public Class<Object> getParameterType() {
+        public Class<?> getParameterType() {
             return delegate.getParameterType();
-        }
-
-        @Override
-        public boolean canBuild(String modelName) {
-            return delegate.canBuild(modelName);
-        }
-
-        @Override
-        public Object buildAll(String modelName, Project project) {
-            return buildAll(modelName, null, project);
         }
     }
 
-    private static class AdaptingBuilder implements ParameterizedToolingModelBuilder<Object> {
+    private static class BuilderWithNoParameter implements Builder {
+        private final String modelName;
+        private final ProjectInternal project;
         private final ToolingModelBuilder delegate;
 
-        public AdaptingBuilder(ToolingModelBuilder delegate) {
+        public BuilderWithNoParameter(String modelName, ProjectInternal project, ToolingModelBuilder delegate) {
+            this.modelName = modelName;
+            this.project = project;
             this.delegate = delegate;
         }
 
         @Override
-        public boolean canBuild(String modelName) {
-            return delegate.canBuild(modelName);
-        }
-
-        @Override
         public Class<Object> getParameterType() {
-            return Object.class;
+            return null;
         }
 
         @Override
-        public Object buildAll(String modelName, Object parameter, Project project) {
+        public Object build(Object parameter) {
             if (parameter != null) {
                 throw new IllegalArgumentException("Expected a null parameter");
             }
             return delegate.buildAll(modelName, project);
         }
+    }
+
+    private static class BuilderWithParameter implements Builder {
+        private final String modelName;
+        private final ProjectInternal project;
+        private final ParameterizedToolingModelBuilder<?> delegate;
+
+        public BuilderWithParameter(String modelName, ProjectInternal project, ParameterizedToolingModelBuilder<?> delegate) {
+            this.modelName = modelName;
+            this.project = project;
+            this.delegate = delegate;
+        }
 
         @Override
-        public Object buildAll(String modelName, Project project) {
-            return delegate.buildAll(modelName, project);
+        public Class<?> getParameterType() {
+            return delegate.getParameterType();
+        }
+
+        @Override
+        public Object build(Object parameter) {
+            if (parameter == null) {
+                return delegate.buildAll(modelName, project);
+            } else {
+                return delegate.buildAll(modelName, Cast.uncheckedCast(parameter), project);
+            }
         }
     }
 
-    private class LockSingleProjectBuilder extends DelegatingBuilder {
+    private static class LockSingleProjectBuilder extends DelegatingBuilder {
+        private final ProjectInternal project;
         private final ProjectStateRegistry projectStateRegistry;
 
-        public LockSingleProjectBuilder(ParameterizedToolingModelBuilder<Object> delegate, ProjectStateRegistry projectStateRegistry) {
+        public LockSingleProjectBuilder(Builder delegate, ProjectInternal project, ProjectStateRegistry projectStateRegistry) {
+            super(delegate);
+            this.project = project;
+            this.projectStateRegistry = projectStateRegistry;
+        }
+
+        @Override
+        public Object build(Object parameter) {
+            return projectStateRegistry.stateFor(project).fromMutableState(p -> delegate.build(parameter));
+        }
+    }
+
+    private static class LockAllProjectsBuilder extends DelegatingBuilder {
+        private final ProjectStateRegistry projectStateRegistry;
+
+        public LockAllProjectsBuilder(Builder delegate, ProjectStateRegistry projectStateRegistry) {
             super(delegate);
             this.projectStateRegistry = projectStateRegistry;
         }
 
         @Override
-        public Object buildAll(String modelName, Object parameter, Project project) {
-            return projectStateRegistry.stateFor(project).fromMutableState(p -> delegate.buildAll(modelName, parameter, project));
-        }
-    }
-
-    private class LockAllProjectsBuilder extends DelegatingBuilder {
-        private final ProjectStateRegistry projectStateRegistry;
-
-        public LockAllProjectsBuilder(ParameterizedToolingModelBuilder<Object> delegate, ProjectStateRegistry projectStateRegistry) {
-            super(delegate);
-            this.projectStateRegistry = projectStateRegistry;
-        }
-
-        @Override
-        public Object buildAll(String modelName, Object parameter, Project project) {
-            return projectStateRegistry.withMutableStateOfAllProjects(() -> delegate.buildAll(modelName, parameter, project));
+        public Object build(Object parameter) {
+            return projectStateRegistry.withMutableStateOfAllProjects(() -> delegate.build(parameter));
         }
     }
 
     private static class BuildOperationWrappingBuilder extends DelegatingBuilder {
+        private final String modelName;
+        private final ProjectInternal project;
         private final BuildOperationExecutor buildOperationExecutor;
 
-        private BuildOperationWrappingBuilder(ParameterizedToolingModelBuilder<Object> delegate, BuildOperationExecutor buildOperationExecutor) {
+        private BuildOperationWrappingBuilder(Builder delegate, String modelName, ProjectInternal project, BuildOperationExecutor buildOperationExecutor) {
             super(delegate);
+            this.modelName = modelName;
+            this.project = project;
             this.buildOperationExecutor = buildOperationExecutor;
         }
 
         @Override
-        public Object buildAll(final String modelName, final Object parameter, final Project project) {
+        public Object build(Object parameter) {
             return buildOperationExecutor.call(new CallableBuildOperation<Object>() {
                 @Override
                 public Object call(BuildOperationContext context) {
-                    return delegate.buildAll(modelName, parameter, project);
+                    return delegate.build(parameter);
                 }
 
                 @Override
