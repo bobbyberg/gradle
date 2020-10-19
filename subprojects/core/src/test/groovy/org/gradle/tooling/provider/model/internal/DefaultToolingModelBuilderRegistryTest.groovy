@@ -16,6 +16,7 @@
 
 package org.gradle.tooling.provider.model.internal
 
+import org.gradle.api.internal.GradleInternal
 import org.gradle.api.internal.project.ProjectInternal
 import org.gradle.api.internal.project.ProjectStateRegistry
 import org.gradle.internal.Factory
@@ -50,6 +51,7 @@ class DefaultToolingModelBuilderRegistryTest extends Specification {
     def "wraps builder when locating for client operation"() {
         def builder1 = Mock(ToolingModelBuilder)
         def builder2 = Mock(ToolingModelBuilder)
+        def gradle = Stub(GradleInternal)
 
         given:
         registry.register(builder1)
@@ -60,8 +62,8 @@ class DefaultToolingModelBuilderRegistryTest extends Specification {
         builder2.canBuild("model") >> true
 
         expect:
-        def actualBuilder = registry.locateForClientOperation("model")
-        actualBuilder.delegate == builder2
+        def actualBuilder = registry.locateForClientOperation("model", false, gradle)
+        actualBuilder.delegate.delegate.delegate == builder2
     }
 
     def "includes a simple implementation for the Void model"() {
@@ -103,6 +105,7 @@ class DefaultToolingModelBuilderRegistryTest extends Specification {
 
     def "wraps parameterized model builder"() {
         def builder = Mock(ParameterizedToolingModelBuilder)
+        def gradle = Stub(GradleInternal)
 
         given:
         registry.register(builder)
@@ -114,7 +117,7 @@ class DefaultToolingModelBuilderRegistryTest extends Specification {
         registry.getBuilder("model")
 
         then:
-        def actualBuilder = registry.locateForClientOperation("model")
-        actualBuilder.delegate == builder
+        def actualBuilder = registry.locateForClientOperation("model", true, gradle)
+        actualBuilder.delegate.delegate.delegate == builder
     }
 }
